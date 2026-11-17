@@ -1,0 +1,26 @@
+diff --git a/submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift b/submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift
+index ea6339fe..ba7a896b 100644
+--- a/submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift
++++ b/submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift
+@@ -4,7 +4,7 @@ import TelegramCore
+ import TelegramUIPreferences
+ 
+ public let defaultDarkPresentationTheme = makeDefaultDarkPresentationTheme(preview: false)
+-public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0x3e88f7), backgroundColors: [], bubbleColors: [], animateBubbleColors: false, wallpaper: nil, baseColor: nil)
++public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0x8b5cf6), backgroundColors: [], bubbleColors: [], animateBubbleColors: false, wallpaper: nil, baseColor: nil)
+ 
+ private extension PresentationThemeBaseColor {
+     var colorWallpaper: (BuiltinWallpaperData, Int32, [UInt32])? {
+diff --git a/submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift b/submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift
+index d86948e3..5cd935b4 100644
+--- a/submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift
++++ b/submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift
+@@ -576,7 +576,7 @@ public struct PresentationChatBubbleSettings: Codable, Equatable {
+     // Message text in New York instead of the system font, picked in Text Size (both modes).
+     public var serifMessageFont: Bool
+     
+-    public static var `default`: PresentationChatBubbleSettings = PresentationChatBubbleSettings(mainRadius: 16, auxiliaryRadius: 8, mergeBubbleCorners: true)
++    public static var `default`: PresentationChatBubbleSettings = PresentationChatBubbleSettings(mainRadius: 22, auxiliaryRadius: 6, mergeBubbleCorners: true)
+     
+     public init(mainRadius: Int32, auxiliaryRadius: Int32, mergeBubbleCorners: Bool, bubbleMode: Bool = true, bubblelessTheme: PresentationThemeReference? = nil, bubblelessAutomaticTheme: PresentationThemeReference? = nil, serifMessageFont: Bool = false) {
+         self.mainRadius = mainRadius
