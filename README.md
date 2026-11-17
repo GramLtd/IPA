@@ -12,3 +12,4 @@ Build is bazel + Xcode on macOS only, see `Telegram-iOS/CLAUDE.md`.
 | patch | what |
 |---|---|
 | 0001-visual-defaults | violet default dark accent (`0x8b5cf6`), bubbles r22/aux6 |
+| 0002-demo-gifts | local-only `[DEMO]` collectibles in own profile gifts tab; Debug menu > Demo gifts (toggle / add / clear) |

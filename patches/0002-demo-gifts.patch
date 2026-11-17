@@ -1,0 +1,400 @@
+diff --git a/submodules/DebugSettingsUI/Sources/DebugController.swift b/submodules/DebugSettingsUI/Sources/DebugController.swift
+index 0b1e344e..f47090c3 100644
+--- a/submodules/DebugSettingsUI/Sources/DebugController.swift
++++ b/submodules/DebugSettingsUI/Sources/DebugController.swift
+@@ -690,6 +690,7 @@ private enum DebugControllerSection: Int32 {
+     case videoExperiments2
+     case info
+     case profiling
++    case demo
+ }
+ 
+ private enum DebugControllerEntry: ItemListNodeEntry {
+@@ -730,6 +731,9 @@ private enum DebugControllerEntry: ItemListNodeEntry {
+     case experimentalCompatibility(Bool)
+     case enableDebugDataDisplay(Bool)
+     case fakeGlass(Bool)
++    case demoGifts(Bool)
++    case demoGiftsAdd
++    case demoGiftsClear
+     case forceClearGlass(Bool)
+     case debugRipple(Bool)
+     case inputDecTextBackend(Bool)
+@@ -808,6 +812,8 @@ private enum DebugControllerEntry: ItemListNodeEntry {
+             return DebugControllerSection.videoExperiments2.rawValue
+         case .versionInfo:
+             return DebugControllerSection.appInfo.rawValue
++        case .demoGifts, .demoGiftsAdd, .demoGiftsClear:
++            return DebugControllerSection.demo.rawValue
+         case .hostInfo:
+             return DebugControllerSection.info.rawValue
+         case .collectCpuProfile, .sendProfileLogs:
+@@ -903,6 +909,12 @@ private enum DebugControllerEntry: ItemListNodeEntry {
+             return 46
+         case .fakeGlass:
+             return 47
++        case .demoGifts:
++            return 201
++        case .demoGiftsAdd:
++            return 202
++        case .demoGiftsClear:
++            return 203
+         case .forceClearGlass:
+             return 48
+         case .debugRipple:
+@@ -1415,6 +1427,23 @@ private enum DebugControllerEntry: ItemListNodeEntry {
+                     })
+                 }).start()
+             })
++        case let .demoGifts(value):
++            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Demo gifts (local only)", value: value, sectionId: self.section, style: .blocks, updated: { value in
++                DemoGiftStore.shared.isEnabled = value
++            })
++        case .demoGiftsAdd:
++            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Add demo gift...", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
++                guard let context = arguments.context else {
++                    return
++                }
++                presentDemoGiftComposer(context: context, present: { controller in
++                    arguments.presentController(controller, nil)
++                })
++            })
++        case .demoGiftsClear:
++            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Clear demo gifts", kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
++                DemoGiftStore.shared.clear()
++            })
+         case let .fakeGlass(value):
+             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Fake glass", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                 let _ = arguments.sharedContext.accountManager.transaction ({ transaction in
+@@ -2251,6 +2280,12 @@ private func debugControllerEntries(context: AccountContext?, sharedContext: Sha
+     entries.append(.collectCpuProfile)
+     entries.append(.sendProfileLogs)
+     
++    if isMainApp {
++        entries.append(.demoGifts(DemoGiftStore.shared.isEnabled))
++        entries.append(.demoGiftsAdd)
++        entries.append(.demoGiftsClear)
++    }
++    
+     return entries
+ }
+ 
+diff --git a/submodules/DebugSettingsUI/Sources/DemoGiftComposer.swift b/submodules/DebugSettingsUI/Sources/DemoGiftComposer.swift
+new file mode 100644
+index 00000000..468754bb
+--- /dev/null
++++ b/submodules/DebugSettingsUI/Sources/DemoGiftComposer.swift
+@@ -0,0 +1,126 @@
++import Foundation
++import UIKit
++import Display
++import SwiftSignalKit
++import TelegramCore
++import TelegramPresentationData
++import PresentationDataUtils
++import AccountContext
++
++/// Debug-menu flow that adds a local-only "[DEMO]" collectible to your own profile gifts tab.
++/// Pick base gift -> model -> backdrop -> pattern -> price. Every step has a "Random" option.
++func presentDemoGiftComposer(context: AccountContext, present: @escaping (ViewController) -> Void) {
++    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
++
++    func sheet(title: String, options: [(String, () -> Void)]) {
++        let controller = ActionSheetController(presentationData: presentationData)
++        var items: [ActionSheetItem] = [ActionSheetTextItem(title: title)]
++        for (name, action) in options {
++            items.append(ActionSheetButtonItem(title: name, color: .accent, action: { [weak controller] in
++                controller?.dismissAnimated()
++                action()
++            }))
++        }
++        controller.setItemGroups([
++            ActionSheetItemGroup(items: items),
++            ActionSheetItemGroup(items: [
++                ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak controller] in
++                    controller?.dismissAnimated()
++                })
++            ])
++        ])
++        present(controller)
++    }
++
++    func rarityLabel(_ rarity: StarGift.UniqueGift.Attribute.Rarity) -> String {
++        switch rarity {
++        case let .permille(value):
++            return "\(Double(value) / 10.0)%"
++        case .uncommon:
++            return "uncommon"
++        case .rare:
++            return "rare"
++        case .epic:
++            return "epic"
++        case .legendary:
++            return "legendary"
++        }
++    }
++
++    func finish(base: StarGift.Gift, model: StarGift.UniqueGift.Attribute, backdrop: StarGift.UniqueGift.Attribute, pattern: StarGift.UniqueGift.Attribute) {
++        let prices: [(String, Int64?)] = [("Not for sale", nil), ("77,777 Stars", 77777), ("1,000 Stars", 1000), ("10,000 Stars", 10000), ("500,000 Stars", 500000)]
++        sheet(title: "Listing price", options: prices.map { label, value in
++            return (label, {
++                let item = DemoGiftStore.makeUniqueGift(
++                    base: base,
++                    attributes: [model, pattern, backdrop],
++                    ownerPeerId: context.account.peerId,
++                    number: Int32.random(in: 1 ... 9999),
++                    resellStars: value,
++                    pinned: false
++                )
++                DemoGiftStore.shared.add(item)
++                DemoGiftStore.shared.isEnabled = true
++            })
++        })
++    }
++
++    func pick(base: StarGift.Gift, attributes: [StarGift.UniqueGift.Attribute]) {
++        let models = attributes.filter { $0.attributeType == .model }
++        let backdrops = attributes.filter { $0.attributeType == .backdrop }
++        let patterns = attributes.filter { $0.attributeType == .pattern }
++        guard !models.isEmpty, !backdrops.isEmpty, !patterns.isEmpty else {
++            return
++        }
++
++        func label(_ attribute: StarGift.UniqueGift.Attribute) -> String {
++            switch attribute {
++            case let .model(name, _, rarity, _), let .pattern(name, _, rarity), let .backdrop(name, _, _, _, _, _, rarity):
++                return "\(name) (\(rarityLabel(rarity)))"
++            case .originalInfo:
++                return ""
++            }
++        }
++
++        func choose(title: String, list: [StarGift.UniqueGift.Attribute], completion: @escaping (StarGift.UniqueGift.Attribute) -> Void) {
++            var options: [(String, () -> Void)] = [("Random", { completion(list.randomElement()!) })]
++            for attribute in list {
++                options.append((label(attribute), { completion(attribute) }))
++            }
++            sheet(title: title, options: options)
++        }
++
++        choose(title: "Model", list: models, completion: { model in
++            choose(title: "Backdrop", list: backdrops, completion: { backdrop in
++                choose(title: "Pattern", list: patterns, completion: { pattern in
++                    finish(base: base, model: model, backdrop: backdrop, pattern: pattern)
++                })
++            })
++        })
++    }
++
++    let _ = (context.engine.payments.cachedStarGifts()
++    |> take(1)
++    |> deliverOnMainQueue).start(next: { gifts in
++        var bases: [StarGift.Gift] = []
++        for gift in gifts ?? [] {
++            if case let .generic(base) = gift, base.upgradeStars != nil {
++                bases.append(base)
++            }
++        }
++        if bases.isEmpty {
++            return
++        }
++        sheet(title: "Base gift", options: bases.map { base in
++            return (base.title ?? "Gift #\(base.id)", {
++                let _ = (context.engine.payments.getStarGiftUpgradeAttributes(giftId: base.id)
++                |> take(1)
++                |> deliverOnMainQueue).start(next: { attributes in
++                    if let attributes {
++                        pick(base: base, attributes: attributes)
++                    }
++                })
++            })
++        })
++    })
++}
+diff --git a/submodules/TelegramCore/Sources/TelegramEngine/Payments/DemoGifts.swift b/submodules/TelegramCore/Sources/TelegramEngine/Payments/DemoGifts.swift
+new file mode 100644
+index 00000000..3f957066
+--- /dev/null
++++ b/submodules/TelegramCore/Sources/TelegramEngine/Payments/DemoGifts.swift
+@@ -0,0 +1,141 @@
++import Foundation
++import SwiftSignalKit
++import Postbox
++
++/// Local-only demo gifts for UI/design work. Nothing here touches the network or the account:
++/// items live in UserDefaults, are merged into the *own* profile gifts state on this device only,
++/// and every item is stamped with a "[DEMO]" title prefix.
++public final class DemoGiftStore {
++    public static let shared = DemoGiftStore()
++
++    public static let titlePrefix = "[DEMO] "
++
++    private let enabledKey = "ipa.demoGifts.enabled"
++    private let itemsKey = "ipa.demoGifts.items"
++    private let revision = ValuePromise<Int>(0, ignoreRepeated: false)
++    private var revisionValue: Int = 0
++    private let lock = NSLock()
++
++    public var updated: Signal<Void, NoError> {
++        return self.revision.get() |> map { _ in Void() }
++    }
++
++    public var isEnabled: Bool {
++        get {
++            return UserDefaults.standard.bool(forKey: self.enabledKey)
++        }
++        set {
++            UserDefaults.standard.set(newValue, forKey: self.enabledKey)
++            self.bump()
++        }
++    }
++
++    public var items: [ProfileGiftsContext.State.StarGift] {
++        self.lock.lock()
++        defer { self.lock.unlock() }
++        guard let data = UserDefaults.standard.data(forKey: self.itemsKey) else {
++            return []
++        }
++        return (try? JSONDecoder().decode([ProfileGiftsContext.State.StarGift].self, from: data)) ?? []
++    }
++
++    public func add(_ item: ProfileGiftsContext.State.StarGift) {
++        var items = self.items
++        items.insert(item, at: 0)
++        self.store(items)
++    }
++
++    public func clear() {
++        self.store([])
++    }
++
++    private func store(_ items: [ProfileGiftsContext.State.StarGift]) {
++        self.lock.lock()
++        if let data = try? JSONEncoder().encode(items) {
++            UserDefaults.standard.set(data, forKey: self.itemsKey)
++        }
++        self.lock.unlock()
++        self.bump()
++    }
++
++    private func bump() {
++        self.revisionValue += 1
++        self.revision.set(self.revisionValue)
++    }
++
++    func apply(to state: ProfileGiftsContext.State) -> ProfileGiftsContext.State {
++        guard self.isEnabled else {
++            return state
++        }
++        let demo = self.items
++        if demo.isEmpty {
++            return state
++        }
++        var state = state
++        state.gifts = demo + state.gifts
++        state.filteredGifts = demo + state.filteredGifts
++        state.count = (state.count ?? 0) + Int32(demo.count)
++        return state
++    }
++
++    /// Builds a unique (collectible) gift from a catalog gift plus chosen model/backdrop/pattern.
++    public static func makeUniqueGift(
++        base: StarGift.Gift,
++        attributes: [StarGift.UniqueGift.Attribute],
++        ownerPeerId: EnginePeer.Id,
++        number: Int32,
++        resellStars: Int64?,
++        pinned: Bool
++    ) -> ProfileGiftsContext.State.StarGift {
++        let id = Int64.random(in: 1 ..< Int64.max / 2)
++        let resell = resellStars.map { [CurrencyAmount(amount: StarsAmount(value: $0, nanos: 0), currency: .stars)] }
++        let unique = StarGift.UniqueGift(
++            id: id,
++            giftId: base.id,
++            title: DemoGiftStore.titlePrefix + (base.title ?? "Gift"),
++            number: number,
++            slug: "demo-\(id)",
++            owner: .peerId(ownerPeerId),
++            attributes: attributes,
++            availability: StarGift.UniqueGift.Availability(issued: number, total: max(number, 10000)),
++            giftAddress: nil,
++            resellAmounts: resell,
++            resellForTonOnly: false,
++            releasedBy: nil,
++            valueAmount: nil,
++            valueCurrency: nil,
++            valueUsdAmount: nil,
++            flags: [],
++            themePeerId: nil,
++            peerColor: nil,
++            hostPeerId: nil,
++            minOfferStars: nil,
++            craftChancePermille: nil
++        )
++        return ProfileGiftsContext.State.StarGift(
++            gift: .unique(unique),
++            reference: nil,
++            fromPeer: nil,
++            date: Int32(Date().timeIntervalSince1970),
++            text: nil,
++            entities: nil,
++            nameHidden: false,
++            savedToProfile: true,
++            pinnedToTop: pinned,
++            convertStars: nil,
++            canUpgrade: false,
++            canExportDate: nil,
++            upgradeStars: nil,
++            transferStars: nil,
++            canTransferDate: nil,
++            canResaleDate: nil,
++            collectionIds: nil,
++            prepaidUpgradeHash: nil,
++            upgradeSeparate: false,
++            dropOriginalDetailsStars: nil,
++            number: number,
++            isRefunded: false,
++            canCraftAt: nil
++        )
++    }
++}
+diff --git a/submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift b/submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift
+index 7a4f486f..8c146e6e 100644
+--- a/submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift
++++ b/submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift
+@@ -3138,7 +3138,7 @@ public final class ProfileGiftsContext {
+     private let impl: QueueLocalObject<ProfileGiftsContextImpl>
+     
+     public var state: Signal<ProfileGiftsContext.State, NoError> {
+-        return Signal { subscriber in
++        let base: Signal<ProfileGiftsContext.State, NoError> = Signal { subscriber in
+             let disposable = MetaDisposable()
+             
+             self.impl.with { impl in
+@@ -3149,10 +3149,18 @@ public final class ProfileGiftsContext {
+             
+             return disposable
+         }
++        if self.collectionId != nil || self.peerId != self.accountPeerId {
++            return base
++        }
++        return combineLatest(queue: .mainQueue(), base, DemoGiftStore.shared.updated)
++        |> map { state, _ in
++            return DemoGiftStore.shared.apply(to: state)
++        }
+     }
+     
+     public let peerId: EnginePeer.Id
+     public let collectionId: Int32?
++    private let accountPeerId: EnginePeer.Id
+     
+     public init(
+         account: Account,
+@@ -3164,6 +3172,7 @@ public final class ProfileGiftsContext {
+     ) {
+         self.peerId = peerId
+         self.collectionId = collectionId
++        self.accountPeerId = account.peerId
+         
+         let queue = self.queue
+         self.impl = QueueLocalObject(queue: queue, generate: {
