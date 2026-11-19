@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2 style="margin-top:0">Аккаунты TikTok</h2>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  {% if not configured %}<p class="err">TIKTOK_CLIENT_KEY не задан — заполните .env.</p>{% endif %}
+  <p class="muted">Владелец аккаунта входит в TikTok и сам разрешает панели публиковать видео.</p>
+  <a class="btn" href="/oauth/start">+ Подключить аккаунт</a>
+</div>
+<div class="card table-wrap">
+  <table>
+    <tr><th></th><th>Имя</th><th>open_id</th><th>Токен до</th><th></th></tr>
+    {% for a in accounts %}
+    <tr>
+      <td>{% if a.avatar_url %}<img class="avatar" src="{{ a.avatar_url }}" alt="">{% endif %}</td>
+      <td>{{ a.display_name or "—" }}</td>
+      <td class="muted">{{ a.open_id[:16] }}…</td>
+      <td class="muted">{{ a.refresh_expires_at[:10] }}</td>
+      <td><form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Отключить аккаунт и удалить его задания?')">
+        <button class="btn ghost">Отключить</button></form></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Пока нет подключённых аккаунтов.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

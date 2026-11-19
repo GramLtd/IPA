@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="card" method="post" action="/upload" enctype="multipart/form-data">
+  <h2 style="margin-top:0">Загрузить видео</h2>
+  <label>Видео (mp4 / mov / webm)</label>
+  <input type="file" name="video" accept="video/mp4,video/quicktime,video/webm" required>
+
+  <label>Аккаунты</label>
+  {% for a in accounts %}
+    <label class="check"><input type="checkbox" name="account_ids" value="{{ a.id }}" checked> {{ a.display_name or a.open_id }}</label>
+  {% else %}
+    <p class="err">Сначала <a href="/">подключите аккаунт</a>.</p>
+  {% endfor %}
+
+  <label>Описание и хэштеги</label>
+  <textarea name="title" rows="3" maxlength="2200" placeholder="#хэштег @упоминание"></textarea>
+
+  <div class="row">
+    <div>
+      <label>Режим</label>
+      <select name="mode">
+        <option value="direct">Опубликовать сразу</option>
+        <option value="inbox">Черновик во «Входящие» TikTok</option>
+      </select>
+    </div>
+    <div>
+      <label>Кто видит</label>
+      <select name="privacy_level">
+        {% for p in privacy_levels %}<option value="{{ p }}" {% if p == "SELF_ONLY" %}selected{% endif %}>{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <p class="muted">Пока приложение не прошло аудит TikTok, разрешено только SELF_ONLY (приватно).</p>
+
+  <div class="row">
+    <div>
+      <label>Когда (пусто — сейчас)</label>
+      <input type="datetime-local" name="scheduled_at">
+    </div>
+    <div>
+      <label>Интервал между аккаунтами, мин</label>
+      <input type="number" name="interval_min" value="0" min="0">
+    </div>
+  </div>
+
+  <label class="check"><input type="checkbox" name="disable_comment" value="true"> Отключить комментарии</label>
+  <label class="check"><input type="checkbox" name="disable_duet" value="true"> Отключить дуэты</label>
+  <label class="check"><input type="checkbox" name="disable_stitch" value="true"> Отключить stitch</label>
+
+  <input type="hidden" name="tz_offset" id="tz_offset" value="0">
+  <p><button class="btn" {% if not accounts %}disabled{% endif %}>Поставить в очередь</button></p>
+</form>
+<script>document.getElementById('tz_offset').value = new Date().getTimezoneOffset();</script>
+{% endblock %}

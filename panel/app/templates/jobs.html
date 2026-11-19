@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<meta http-equiv="refresh" content="15">
+<div class="card table-wrap">
+  <h2 style="margin-top:0">Очередь публикаций</h2>
+  <table>
+    <tr><th>#</th><th>Аккаунт</th><th>Файл</th><th>Режим</th><th>Время (UTC)</th><th>Статус</th><th></th></tr>
+    {% for j in jobs %}
+    <tr>
+      <td>{{ j.id }}</td>
+      <td>{{ j.display_name or "—" }}</td>
+      <td class="muted">{{ j.filename }}</td>
+      <td>{{ "сразу" if j.mode == "direct" else "черновик" }}</td>
+      <td class="muted">{{ j.scheduled_at[:16].replace("T", " ") }}</td>
+      <td class="st-{{ j.status }}">{{ STATUS_RU.get(j.status, j.status) }}
+        {% if j.error %}<div class="muted err">{{ j.error }}</div>{% endif %}</td>
+      <td>
+        {% if j.status == "failed" %}
+        <form method="post" action="/jobs/{{ j.id }}/retry"><button class="btn ghost">Повторить</button></form>
+        {% elif j.status == "scheduled" %}
+        <form method="post" action="/jobs/{{ j.id }}/cancel"><button class="btn ghost">Отменить</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Очередь пуста.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
